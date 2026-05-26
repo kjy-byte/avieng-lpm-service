@@ -1,12 +1,17 @@
 import streamlit as st
 import requests
 import base64
+import csv
+from io import StringIO
 
 from datetime import datetime, timedelta
 
 # =====================================================
 # 1. 페이지 설정 및 상태 초기화
 # =====================================================
+if "maker_list" not in st.session_state:
+    st.session_state.maker_list = [""]
+
 st.set_page_config(page_title="장비 점검 관리 프로그램", layout="wide")
 
 if "save_success" not in st.session_state: st.session_state.save_success = False
@@ -59,6 +64,34 @@ if st.session_state.save_success:
 # =====================================================
 # 2. 함수 정의
 # =====================================================
+@st.cache_data(ttl=300)
+def load_maker_list():
+
+    url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTUfTySn8scuRIz5U0ONICRjSEOn_0PtDrHIx1l8sAykH_hkYYbf4bR83-izE-NFt6wDIkQ8n1RQ_qM/pub?output=csv"
+
+    try:
+        response = requests.get(url)
+        response.raise_for_status()
+
+        # 한글 깨짐 방지
+        csv_text = response.content.decode("utf-8-sig")
+
+        csv_data = StringIO(csv_text)
+        reader = csv.reader(csv_data)
+        rows = list(reader)
+
+        maker_list = []
+
+        for row in rows[1:]:
+            if len(row) > 0 and row[0].strip():
+                maker_list.append(row[0].strip())
+
+        return [""] + maker_list
+
+    except Exception as e:
+        st.error(f"장비사 목록을 불러오지 못했습니다: {e}")
+        return [""]
+
 def calc_work_hours(start_time, end_time):
     if not start_time or not end_time: return 0.0
     try:
@@ -156,10 +189,35 @@ manager = c4.text_input("현업 담당자", key="manager")
 # -----------------------------
 # 2줄: 현업 담당자 / 장비사 / 호기명
 # -----------------------------
-c5, c6, c7 = st.columns(3)
-company = c5.text_input("장비사", key="company")
-unit_name = c6.text_input("호기명", key="unit_name")
-requester = c7.text_input("장비사 요청자", key="requester")
+
+c5, c_btn, c6, c7 = st.columns([2, 1, 2, 2])
+maker_list = load_maker_list()
+# =========================
+# 장비사
+# =========================
+with c5:
+    company = st.selectbox("장비사",st.session_state.maker_list,key="company")
+
+# =========================
+# 목록 버튼
+# =========================
+with c_btn:
+    st.markdown("<br>", unsafe_allow_html=True)
+    if st.button("목록 불러오기"):
+        st.session_state.maker_list = load_maker_list()
+        st.rerun()
+
+# =========================
+# 호기명
+# =========================
+with c6:
+    unit_name = st.text_input("호기명",key="unit_name")
+
+# =========================
+# 장비사 요청자
+# =========================
+with c7:
+    requester = st.text_input("장비사 요청자",key="requester")
 
 # -----------------------------
 # 3줄: 장비사 요청자 / 작업자 / Service Order
