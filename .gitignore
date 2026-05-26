@@ -1,0 +1,10 @@
+venv/
+venv4/
+venv_final/
+.idea/
+build/
+dist/
+my_flutter_app/
+__pycache__/
+*.pyc
+*.exe
