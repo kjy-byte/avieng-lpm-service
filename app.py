@@ -15,7 +15,13 @@ if "maker_list" not in st.session_state:
 if "requester_map" not in st.session_state:
     st.session_state.requester_map = {}
 
-st.set_page_config(page_title="장비 점검 관리 프로그램", layout="wide")
+if "info_message" not in st.session_state:
+    st.session_state.info_message = ""
+
+if "warning_message" not in st.session_state:
+    st.session_state.warning_message = ""
+
+st.set_page_config(page_title="TAS 서비스이력 입력 프로그램", layout="wide")
 
 if "save_success" not in st.session_state: st.session_state.save_success = False
 if "reset_required" not in st.session_state: st.session_state.reset_required = False
@@ -31,7 +37,6 @@ if st.session_state.reset_required:
         "company_manager",  # 추가
         "requester_selected",
         "writer",
-        "unit_name",
         "po_code"
     ]:
         st.session_state[key] = ""
@@ -67,7 +72,7 @@ if st.session_state.save_success:
 # =====================================================
 # 2. 함수 정의
 # =====================================================
-@st.cache_data(ttl=300)
+@st.cache_data(ttl=300, show_spinner=False)
 def load_maker_list():
 
     url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTUfTySn8scuRIz5U0ONICRjSEOn_0PtDrHIx1l8sAykH_hkYYbf4bR83-izE-NFt6wDIkQ8n1RQ_qM/pub?output=csv"
@@ -96,7 +101,7 @@ def load_maker_list():
         return [""]
 
 
-@st.cache_data(ttl=300)
+@st.cache_data(ttl=300, show_spinner=False)
 def load_requester_list(company_name):
     selected_company = company_name.strip()
 
@@ -229,6 +234,15 @@ def work_card(title, prefix, idx, bg_color, expanded=False):
 # =====================================================
 st.title("장비 점검 관리 프로그램")
 st.header("1. 기본 정보")
+# 메시지 출력 영역
+message_area = st.empty()
+if st.session_state.warning_message:
+    message_area.warning(st.session_state.warning_message)
+    st.session_state.warning_message = ""
+
+elif st.session_state.info_message:
+    message_area.success(st.session_state.info_message)
+    st.session_state.info_message = ""
 
 # =========================
 # 장비사 목록 버튼
@@ -237,6 +251,12 @@ if st.button(
     "장비사 목록 불러오기",
     key="load_maker_btn"
 ):
+    message_area.info("장비사 목록 불러오는 중...")
+    load_maker_list.clear()
+    st.session_state.maker_list = load_maker_list()
+    message_area.success("장비사 목록 업데이트 완료")
+    st.rerun()
+
     load_maker_list.clear()
     st.session_state.maker_list = load_maker_list()
     st.rerun()
@@ -294,19 +314,16 @@ manager = c5.text_input(
     key="manager"
 )
 
-# -----------------------------
-# 2줄: 현업 담당자 / 장비사 / 호기명
-# -----------------------------
-
 
 # =========================
+# 장비사 요청자 메일주소 가져오기
+# =========================
+# -----------------------------
+# 장비사 / 요청자 목록 / 장비사 담당자 / 요청자 선택 / AVIENG 작업자
+# -----------------------------
+c5, c6, c7, c8, c9 = st.columns([2, 1.7, 2, 2.5, 1.8])
+
 # 장비사
-# =========================
-# -----------------------------
-# 2줄: 장비사 / 버튼 / 호기명 / 장비사 담당자 / 요청자 선택
-# -----------------------------
-c5, c6, c7, c8, c9 = st.columns([2, 1.6, 2, 2, 2.5])
-
 with c5:
     company = st.selectbox(
         "장비사",
@@ -314,60 +331,67 @@ with c5:
         key="company"
     )
 
+# 요청자 목록 버튼
 with c6:
+
     st.markdown(
         """
         <div style="height: 27px;"></div>
         """,
         unsafe_allow_html=True
     )
+
     if st.button(
         "장비사 요청자 메일주소 가져오기",
-        key="load_requester_btn"
+        key="load_requester_btn",
+        use_container_width=True
     ):
+
         selected_company = st.session_state.get("company", "")
 
         if not selected_company:
-            st.warning("장비사를 먼저 선택해주세요.")
+            message_area.warning("장비사를 먼저 선택해주세요.")
         else:
             load_requester_list.clear()
-            st.session_state.requester_map = load_requester_list(selected_company)
+
+            st.session_state.requester_map = load_requester_list(
+                selected_company
+            )
+
             st.session_state.requester_selected = ""
 
             if not st.session_state.requester_map:
-                st.warning(f"{selected_company} 요청자 목록이 없습니다.")
+                st.session_state.warning_message = (
+                    f"{selected_company} 장비사의 요청자 목록이 없습니다."
+                )
             else:
-                st.success(f"{selected_company} 요청자 목록을 불러왔습니다.")
+                st.session_state.info_message = (
+                    f"{selected_company} 요청자 목록을 불러왔습니다."
+                )
 
             st.rerun()
 
+# 장비사 담당자
 with c7:
-    unit_name = st.text_input(
-        "호기명",
-        key="unit_name"
-    )
-
-with c8:
     company_manager = st.text_input(
         "장비사 담당자",
         key="company_manager"
     )
 
-requester_options = [""] + list(st.session_state.requester_map.keys())
+# 장비사 요청자 메일주소 선택
+requester_options = [""] + list(
+    st.session_state.requester_map.keys()
+)
 
-with c9:
+with c8:
     requester_selected = st.selectbox(
         "장비사 요청자 메일주소 선택",
         requester_options,
         key="requester_selected"
     )
 
-# -----------------------------
-# 다음 줄: AVIENG 작업자
-# -----------------------------
-c10, _ = st.columns([2, 3])
-
-with c10:
+# AVIENG 작업자
+with c9:
     writer = st.selectbox(
         "AVIENG 작업자",
         [
@@ -385,7 +409,6 @@ with c10:
         ],
         key="writer"
     )
-
 
 st.header("첨부 파일")
 uploaded_file = st.file_uploader(
@@ -411,15 +434,43 @@ with col_eq:
 
 for i in range(1, equipment_count + 1):
     with st.expander(f"장비 {i} 상세 정보", expanded=(i == 1)):
+        # =========================
+        # 장비 기본 정보 한줄 배치
+        # 장비코드 | LP타입 | MFGNO | 제조일자 | F/W
+        # =========================
+        c0, c1, c2, c3, c4 = st.columns([1.3, 1.1, 1.2, 1.2, 1])
 
-        c0, c00 = st.columns(2)
-        c0.text_input(f"장비코드_{i}", key=f"code_{i}")
-        c00.text_input(f"LP타입_{i}", key=f"lp_{i}")
+        with c0:
+            st.text_input(
+                f"장비코드_{i}",
+                key=f"code_{i}"
+            )
 
-        c1, c2, c3 = st.columns(3)
-        c1.text_input(f"MFGNO_{i}", key=f"mfg_{i}")
-        c2.text_input(f"제조일자_{i}", key=f"date_{i}")
-        c3.text_input(f"F/W_{i}", key=f"fw_{i}")
+        with c1:
+            st.text_input(
+                f"LP타입_{i}",
+                key=f"lp_{i}"
+            )
+
+        with c2:
+            st.text_area(
+                f"MFGNO_{i}",
+                key=f"mfg_{i}",
+                height=80
+            )
+
+        with c3:
+            st.text_area(
+                f"제조일자_{i}",
+                key=f"date_{i}",
+                height=80
+            )
+
+        with c4:
+            st.text_input(
+                f"F/W_{i}",
+                key=f"fw_{i}"
+            )
 
         st.text_area(f"Error현상_{i}", key=f"err_{i}")
         st.text_area(f"작업내용_{i}", key=f"work_{i}")
@@ -548,7 +599,6 @@ if st.button("저장", type="primary"):
             "manager": st.session_state.get("manager", ""),
             "company": st.session_state.get("company", ""),
             "company_manager": st.session_state.get("company_manager", ""),
-            "unit_name": st.session_state.get("unit_name", ""),
 
             # 장비사 요청자 정보
             # 화면 표시: D열 / E열
@@ -595,7 +645,7 @@ if st.button("저장", type="primary"):
         data["file_type"] = file_type
         data["file_data"] = file_data
 
-        url = "https://script.google.com/macros/s/AKfycby2ocIW3lpLnUMo0EZ9hYhp__yGJmMG8wfYixPni2abIbSdWHkq0MoJhoaPyYlxlcWxAQ/exec"
+        url = "https://script.google.com/macros/s/AKfycbzVpXmgHBn6cEAb2rNB4FlZP9vSgFC4-Gpy2rxzhczllxI_nvhKuhuFDE3cYiI0C_qviw/exec"
         try:
             response = requests.post(url, json=data)
             if response.status_code == 200:
